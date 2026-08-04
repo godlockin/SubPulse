@@ -2,5 +2,9 @@ name = "sub-pulse"
 compatibility_date = "2026-08-04"
 pages_build_output_dir = "dist"
 
+kv_namespaces = [
+  { binding = "SUB_MANAGER_KV", id = "80a3cd116a284618b8a3494f9b2b6438" }
+]
+
 [vars]
 ENVIRONMENT = "production"
