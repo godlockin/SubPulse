@@ -53,12 +53,12 @@ export function App() {
   }, [subscriptions]);
 
   // Parallel Sync / pull remote subscription links content
-  const syncSubscriptions = useCallback(async () => {
-    if (isSyncing || subscriptions.length === 0) return;
+  const syncSubscriptionsForList = useCallback(async (targetSubs: Subscription[]) => {
+    if (isSyncing || targetSubs.length === 0) return;
     setIsSyncing(true);
 
     const fetchResults = await Promise.all(
-      subscriptions.map(async (sub) => {
+      targetSubs.map(async (sub) => {
         if (!sub.enabled) {
           return { sub, parsedNodes: [] };
         }
@@ -94,24 +94,31 @@ export function App() {
     setSubscriptions(updatedSubs);
     setRawNodes(newRawNodes);
     setIsSyncing(false);
-  }, [subscriptions, isSyncing]);
+  }, [isSyncing]);
 
-  // Auto-sync on initial mount
+  const syncSubscriptions = useCallback(() => {
+    syncSubscriptionsForList(subscriptions);
+  }, [subscriptions, syncSubscriptionsForList]);
+
+  // Auto-sync subscriptions on initial mount
   useEffect(() => {
+    let isMounted = true;
     async function initData() {
       const apiSubs = await loadSubscriptionsFromApi();
-      if (apiSubs && apiSubs.length > 0) {
+      const subsToUse = (apiSubs && apiSubs.length > 0) ? apiSubs : subscriptions;
+      if (isMounted && apiSubs && apiSubs.length > 0) {
         setSubscriptions(apiSubs);
+      }
+      // Trigger initial sync once
+      if (isMounted && subsToUse.some((s) => s.enabled)) {
+        syncSubscriptionsForList(subsToUse);
       }
     }
     initData();
+    return () => {
+      isMounted = false;
+    };
   }, []);
-
-  useEffect(() => {
-    if (rawNodes.length === 0 && subscriptions.some((s) => s.enabled)) {
-      syncSubscriptions();
-    }
-  }, [subscriptions]);
 
   // IP Geolocation state
   const [geoMap, setGeoMap] = useState<Record<string, any>>(() => getCachedGeoMap());

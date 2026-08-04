@@ -111,25 +111,39 @@ export function saveLatencyCache(nodes: DeduplicatedNode[]): void {
   }
 }
 
-// Fetch remote subscription content with CORS fallback handling
+// Fetch remote subscription content with CORS fallback and server proxy
 export async function fetchSubscriptionContent(url: string): Promise<string> {
   const cleanUrl = url.trim();
 
-  // Try direct fetch first
+  // 1. Try serverless /api/proxy endpoint first (bypasses browser CORS & recovers subconverter 502s)
+  try {
+    const proxyApiUrl = `/api/proxy?url=${encodeURIComponent(cleanUrl)}`;
+    const res = await fetch(proxyApiUrl);
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.length > 10 && !text.includes('502 Bad Gateway')) {
+        return text;
+      }
+    }
+  } catch {
+    // Continue to direct fetch
+  }
+
+  // 2. Try direct browser fetch
   try {
     const res = await fetch(cleanUrl, {
       headers: {
-        'User-Agent': 'ClashforWindows/0.20.39 v2rayN/6.23 sub-manager'
+        'User-Agent': 'ClashforWindows/0.20.39 v2rayN/6.23 sub-pulse'
       }
     });
     if (res.ok) {
       return await res.text();
     }
   } catch (e) {
-    // CORS error or network block, fallback to proxy
+    // CORS error or network block, fallback to public proxy
   }
 
-  // Fallback CORS proxies
+  // 3. Fallback public CORS proxies
   const proxies = [
     `https://api.allorigins.win/raw?url=${encodeURIComponent(cleanUrl)}`,
     `https://corsproxy.io/?${encodeURIComponent(cleanUrl)}`
@@ -147,5 +161,5 @@ export async function fetchSubscriptionContent(url: string): Promise<string> {
     }
   }
 
-  throw new Error('无法拉取该订阅链接，请检查链接或网络代理设置');
+  throw new Error('无法拉取该订阅链接，请检查链接或网络设置');
 }
