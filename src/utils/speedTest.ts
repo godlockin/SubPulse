@@ -77,22 +77,28 @@ export async function runParallelSpeedTest(
   let errorCount = 0;
   let totalLatency = 0;
 
-  const updateProgress = (updatedNode: DeduplicatedNode) => {
-    if (options.onProgress) {
-      const avgLatency = success > 0 ? Math.round(totalLatency / success) : 0;
-      options.onProgress(
-        {
-          total: nodes.length,
-          completed,
-          testing: nodes.length - completed,
-          success,
-          timeout,
-          error: errorCount,
-          avgLatency,
-          isRunning: completed < nodes.length
-        },
-        updatedNode
-      );
+  let lastUpdateTime = 0;
+
+  const updateProgress = (updatedNode: DeduplicatedNode, force: boolean = false) => {
+    const now = performance.now();
+    if (force || now - lastUpdateTime > 80 || completed === nodes.length) {
+      lastUpdateTime = now;
+      if (options.onProgress) {
+        const avgLatency = success > 0 ? Math.round(totalLatency / success) : 0;
+        options.onProgress(
+          {
+            total: nodes.length,
+            completed,
+            testing: nodes.length - completed,
+            success,
+            timeout,
+            error: errorCount,
+            avgLatency,
+            isRunning: completed < nodes.length
+          },
+          updatedNode
+        );
+      }
     }
   };
 
@@ -108,7 +114,6 @@ export async function runParallelSpeedTest(
         status: 'testing'
       };
       resultsMap.set(item.fingerprint, testingNode);
-      updateProgress(testingNode);
 
       // Execute probe
       const res = await testSingleNodeLatency(item, timeoutMs);
@@ -132,7 +137,7 @@ export async function runParallelSpeedTest(
       };
 
       resultsMap.set(item.fingerprint, finalNode);
-      updateProgress(finalNode);
+      updateProgress(finalNode, completed === nodes.length);
     }
   };
 

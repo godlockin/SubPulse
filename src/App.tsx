@@ -100,24 +100,25 @@ export function App() {
     syncSubscriptionsForList(subscriptions);
   }, [subscriptions, syncSubscriptionsForList]);
 
+  // Ensure initial sync runs strictly once
+  const initialSyncRef = React.useRef(false);
+
   // Auto-sync subscriptions on initial mount
   useEffect(() => {
-    let isMounted = true;
+    if (initialSyncRef.current) return;
+    initialSyncRef.current = true;
+
     async function initData() {
       const apiSubs = await loadSubscriptionsFromApi();
       const subsToUse = (apiSubs && apiSubs.length > 0) ? apiSubs : subscriptions;
-      if (isMounted && apiSubs && apiSubs.length > 0) {
+      if (apiSubs && apiSubs.length > 0) {
         setSubscriptions(apiSubs);
       }
-      // Trigger initial sync once
-      if (isMounted && subsToUse.some((s) => s.enabled)) {
+      if (subsToUse.some((s) => s.enabled)) {
         syncSubscriptionsForList(subsToUse);
       }
     }
     initData();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   // IP Geolocation state
@@ -272,23 +273,28 @@ export function App() {
     saveLatencyCache([updated]);
   };
 
-  // Run IP Geo Test across all deduplicated nodes
+  // Run IP Geo Test across all deduplicated nodes (batched update to prevent flickering)
   const handleRunGeoTest = async () => {
     if (deduplicatedNodes.length === 0 || isGeoTesting) return;
     setIsGeoTesting(true);
 
     const newGeoMap = { ...geoMap };
+    let hasUpdates = false;
+
     for (const node of deduplicatedNodes) {
       const server = node.primaryNode.server;
       if (!newGeoMap[server]) {
         const geoInfo = await fetchIPGeo(server);
         if (geoInfo) {
           newGeoMap[server] = geoInfo;
-          setGeoMap({ ...newGeoMap });
+          hasUpdates = true;
         }
       }
     }
 
+    if (hasUpdates) {
+      setGeoMap(newGeoMap);
+    }
     setIsGeoTesting(false);
   };
 
