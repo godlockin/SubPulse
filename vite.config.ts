@@ -3,7 +3,16 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { getSubscriptionsFromSqlite, saveSubscriptionsToSqlite } from './server/db';
 
-// Vite Plugin for Local SQLite Database API & Subscription Fetch Proxy
+function getCountryFlagEmoji(countryCode: string): string {
+  if (!countryCode || countryCode.length !== 2) return '🌐';
+  const codePoints = countryCode
+    .toUpperCase()
+    .split('')
+    .map((char) => 127397 + char.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
+}
+
+// Vite Plugin for Local Server Endpoints (/api/subscriptions, /api/proxy, /api/geo)
 function localServerPlugin(): Plugin {
   return {
     name: 'vite-plugin-local-server',
@@ -59,7 +68,6 @@ function localServerPlugin(): Plugin {
         try {
           const targetUrl = decodeURIComponent(urlParam);
 
-          // 1. Try manual redirect first to inspect 301/302 Location header for embedded raw node URLs
           try {
             const redirectRes = await fetch(targetUrl, {
               redirect: 'manual',
@@ -92,7 +100,6 @@ function localServerPlugin(): Plugin {
             }
           } catch {}
 
-          // 2. Standard follow fetch
           const fetchRes = await fetch(targetUrl, {
             redirect: 'follow',
             headers: {
@@ -106,6 +113,47 @@ function localServerPlugin(): Plugin {
           res.statusCode = 500;
           res.end(err.message || 'Proxy fetch failed');
         }
+      });
+
+      // IP Geolocation Endpoint
+      server.middlewares.use('/api/geo', async (req, res) => {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        const reqUrl = new URL(req.url || '', 'http://localhost');
+        const ipParam = reqUrl.searchParams.get('ip') || reqUrl.searchParams.get('host');
+
+        if (!ipParam) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'Missing ip parameter' }));
+          return;
+        }
+
+        const cleanIp = ipParam.trim();
+
+        try {
+          const fetchRes = await fetch(`http://ip-api.com/json/${cleanIp}?lang=zh-CN`);
+          if (fetchRes.ok) {
+            const data: any = await fetchRes.json();
+            if (data && data.status === 'success') {
+              const countryCode = (data.countryCode || '').toUpperCase();
+              res.end(
+                JSON.stringify({
+                  ip: data.query || cleanIp,
+                  country: data.country || countryCode,
+                  countryCode,
+                  city: data.city || '',
+                  isp: data.isp || data.org || '',
+                  flag: getCountryFlagEmoji(countryCode)
+                })
+              );
+              return;
+            }
+          }
+        } catch {}
+
+        res.statusCode = 502;
+        res.end(JSON.stringify({ error: 'Failed to lookup IP geolocation' }));
       });
     }
   };

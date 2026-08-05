@@ -31,7 +31,7 @@ export function saveCachedGeoMap(map: Record<string, IPGeoInfo>): void {
   }
 }
 
-// Fetch IP Geolocation for a host/IP
+// Fetch IP Geolocation for a host/IP using serverless API endpoint
 export async function fetchIPGeo(host: string): Promise<IPGeoInfo | null> {
   const cleanHost = host.trim();
   if (!cleanHost) return null;
@@ -41,19 +41,19 @@ export async function fetchIPGeo(host: string): Promise<IPGeoInfo | null> {
     return cache[cleanHost];
   }
 
+  // 1. Try serverless /api/geo endpoint first (bypasses browser CORS & 429 Rate Limits)
   try {
-    // Try ip-api.com with Chinese response
-    const res = await fetch(`https://ipapi.co/${cleanHost}/json/`);
+    const res = await fetch(`/api/geo?ip=${encodeURIComponent(cleanHost)}`);
     if (res.ok) {
       const data = await res.json();
-      if (data && data.country_code) {
+      if (data && data.countryCode) {
         const geoInfo: IPGeoInfo = {
           ip: data.ip || cleanHost,
-          country: data.country_name || data.country_code,
-          countryCode: data.country_code,
+          country: data.country || data.countryCode,
+          countryCode: data.countryCode,
           city: data.city || '',
-          isp: data.org || data.asn || '',
-          flag: getCountryFlag(data.country_code),
+          isp: data.isp || '',
+          flag: data.flag || getCountryFlag(data.countryCode),
           fetchedAt: Date.now()
         };
         cache[cleanHost] = geoInfo;
@@ -62,21 +62,22 @@ export async function fetchIPGeo(host: string): Promise<IPGeoInfo | null> {
       }
     }
   } catch {
-    // Fallback to secondary IP API if blocked
+    // Fallback to direct client fetch if serverless endpoint fails
   }
 
+  // 2. Direct client fallback
   try {
-    const res = await fetch(`https://api.ip.sb/geoip/${cleanHost}`);
+    const res = await fetch(`http://ip-api.com/json/${cleanHost}?lang=zh-CN`);
     if (res.ok) {
       const data = await res.json();
-      if (data && data.country_code) {
+      if (data && data.countryCode) {
         const geoInfo: IPGeoInfo = {
-          ip: data.ip || cleanHost,
-          country: data.country || data.country_code,
-          countryCode: data.country_code,
+          ip: data.query || cleanHost,
+          country: data.country || data.countryCode,
+          countryCode: data.countryCode,
           city: data.city || '',
-          isp: data.organization || '',
-          flag: getCountryFlag(data.country_code),
+          isp: data.isp || data.org || '',
+          flag: getCountryFlag(data.countryCode),
           fetchedAt: Date.now()
         };
         cache[cleanHost] = geoInfo;
@@ -84,9 +85,7 @@ export async function fetchIPGeo(host: string): Promise<IPGeoInfo | null> {
         return geoInfo;
       }
     }
-  } catch {
-    // Ignore fallback failure
-  }
+  } catch {}
 
   return null;
 }
