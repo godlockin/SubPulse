@@ -329,6 +329,12 @@ export function App() {
     setSubscriptions((prev) => [...prev, newSub]);
   };
 
+  const handleUpdateSubscription = (id: string, name: string, url: string, autoUpdateHours: number) => {
+    setSubscriptions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, name, url, autoUpdateHours, error: null } : s))
+    );
+  };
+
   const handleDeleteSubscription = (id: string) => {
     setSubscriptions((prev) => prev.filter((s) => s.id !== id));
   };
@@ -438,6 +444,7 @@ export function App() {
         onClose={() => setIsSubModalOpen(false)}
         subscriptions={subscriptions}
         onAddSubscription={handleAddSubscription}
+        onUpdateSubscription={handleUpdateSubscription}
         onDeleteSubscription={handleDeleteSubscription}
         onToggleSubscription={handleToggleSubscription}
       />
