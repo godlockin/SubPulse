@@ -8,6 +8,46 @@ export const onRequestGet: PagesFunction = async (context) => {
   try {
     const targetUrl = decodeURIComponent(urlParam);
 
+    // 1. Try manual redirect first to inspect 301/302 Location header for embedded raw node URLs
+    try {
+      const redirectRes = await fetch(targetUrl, {
+        redirect: 'manual',
+        headers: {
+          'User-Agent': 'ClashforWindows/0.20.39 v2rayN/6.23 sub-pulse'
+        }
+      });
+
+      const location = redirectRes.headers.get('location');
+      if (location) {
+        const fullLocation = new URL(location, targetUrl).toString();
+        const locObj = new URL(fullLocation);
+        const embeddedUrl = locObj.searchParams.get('url');
+        if (embeddedUrl) {
+          const decodedNodeUrl = decodeURIComponent(embeddedUrl);
+          // If embedded target is a secondary HTTP subscription link, fetch it
+          if (decodedNodeUrl.startsWith('http://') || decodedNodeUrl.startsWith('https://')) {
+            const subRes = await fetch(decodedNodeUrl, {
+              headers: { 'User-Agent': 'ClashforWindows/0.20.39 v2rayN/6.23 sub-pulse' }
+            });
+            if (subRes.ok) {
+              const text = await subRes.text();
+              return new Response(text, {
+                headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' }
+              });
+            }
+          } else {
+            // Embedded raw protocol string (vless://, vmess://, trojan://, ss://, etc.)
+            return new Response(decodedNodeUrl, {
+              headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' }
+            });
+          }
+        }
+      }
+    } catch {
+      // Fallthrough to standard follow fetch
+    }
+
+    // 2. Standard follow fetch
     const fetchRes = await fetch(targetUrl, {
       redirect: 'follow',
       headers: {
@@ -16,27 +56,6 @@ export const onRequestGet: PagesFunction = async (context) => {
     });
 
     const text = await fetchRes.text();
-    const finalUrl = fetchRes.url || targetUrl;
-
-    // Check if the subconverter returned 502 or 4xx/5xx error, but embedded the raw node url in redirect query parameter!
-    if (!fetchRes.ok || text.includes('error code: 502') || text.includes('502 Bad Gateway')) {
-      try {
-        const urlObj = new URL(finalUrl);
-        const embeddedUrl = urlObj.searchParams.get('url');
-        if (embeddedUrl) {
-          const decodedNodeUrl = decodeURIComponent(embeddedUrl);
-          return new Response(decodedNodeUrl, {
-            headers: {
-              'Content-Type': 'text/plain; charset=utf-8',
-              'Access-Control-Allow-Origin': '*'
-            }
-          });
-        }
-      } catch {
-        // Fallback
-      }
-    }
-
     return new Response(text, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',

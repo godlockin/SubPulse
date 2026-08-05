@@ -57,27 +57,50 @@ function localServerPlugin(): Plugin {
         }
 
         try {
-          const fetchRes = await fetch(decodeURIComponent(urlParam), {
+          const targetUrl = decodeURIComponent(urlParam);
+
+          // 1. Try manual redirect first to inspect 301/302 Location header for embedded raw node URLs
+          try {
+            const redirectRes = await fetch(targetUrl, {
+              redirect: 'manual',
+              headers: {
+                'User-Agent': 'ClashforWindows/0.20.39 v2rayN/6.23 sub-pulse'
+              }
+            });
+
+            const location = redirectRes.headers.get('location');
+            if (location) {
+              const fullLocation = new URL(location, targetUrl).toString();
+              const locObj = new URL(fullLocation);
+              const embeddedUrl = locObj.searchParams.get('url');
+              if (embeddedUrl) {
+                const decodedNodeUrl = decodeURIComponent(embeddedUrl);
+                if (decodedNodeUrl.startsWith('http://') || decodedNodeUrl.startsWith('https://')) {
+                  const subRes = await fetch(decodedNodeUrl, {
+                    headers: { 'User-Agent': 'ClashforWindows/0.20.39 v2rayN/6.23 sub-pulse' }
+                  });
+                  if (subRes.ok) {
+                    const text = await subRes.text();
+                    res.end(text);
+                    return;
+                  }
+                } else {
+                  res.end(decodedNodeUrl);
+                  return;
+                }
+              }
+            }
+          } catch {}
+
+          // 2. Standard follow fetch
+          const fetchRes = await fetch(targetUrl, {
+            redirect: 'follow',
             headers: {
               'User-Agent': 'ClashforWindows/0.20.39 v2rayN/6.23 sub-pulse'
             }
           });
 
           const text = await fetchRes.text();
-          const finalUrl = fetchRes.url || urlParam;
-
-          if (!fetchRes.ok || text.includes('error code: 502') || text.includes('502 Bad Gateway')) {
-            try {
-              const urlObj = new URL(finalUrl);
-              const embeddedUrl = urlObj.searchParams.get('url');
-              if (embeddedUrl) {
-                const decodedNodeUrl = decodeURIComponent(embeddedUrl);
-                res.end(decodedNodeUrl);
-                return;
-              }
-            } catch {}
-          }
-
           res.end(text);
         } catch (err: any) {
           res.statusCode = 500;
