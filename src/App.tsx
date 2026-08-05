@@ -273,27 +273,44 @@ export function App() {
     saveLatencyCache([updated]);
   };
 
-  // Run IP Geo Test across all deduplicated nodes (batched update to prevent flickering)
+  // Run Parallel IP Geo Test across all deduplicated nodes (12 concurrency pool)
   const handleRunGeoTest = async () => {
     if (deduplicatedNodes.length === 0 || isGeoTesting) return;
     setIsGeoTesting(true);
 
     const newGeoMap = { ...geoMap };
+
+    // Unique servers needing fetch
+    const serversToFetch = Array.from(
+      new Set(deduplicatedNodes.map((n) => n.primaryNode.server).filter((s) => !newGeoMap[s]))
+    );
+
+    if (serversToFetch.length === 0) {
+      setIsGeoTesting(false);
+      return;
+    }
+
+    const concurrency = 12;
+    const queue = [...serversToFetch];
     let hasUpdates = false;
 
-    for (const node of deduplicatedNodes) {
-      const server = node.primaryNode.server;
-      if (!newGeoMap[server]) {
+    const worker = async () => {
+      while (queue.length > 0) {
+        const server = queue.shift();
+        if (!server) break;
         const geoInfo = await fetchIPGeo(server);
         if (geoInfo) {
           newGeoMap[server] = geoInfo;
           hasUpdates = true;
         }
       }
-    }
+    };
+
+    const pool = Array.from({ length: Math.min(concurrency, serversToFetch.length) }, () => worker());
+    await Promise.all(pool);
 
     if (hasUpdates) {
-      setGeoMap(newGeoMap);
+      setGeoMap({ ...newGeoMap });
     }
     setIsGeoTesting(false);
   };
