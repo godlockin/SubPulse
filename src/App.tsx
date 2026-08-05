@@ -54,7 +54,7 @@ export function App() {
 
   // Parallel Sync / pull remote subscription links content
   const syncSubscriptionsForList = useCallback(async (targetSubs: Subscription[]) => {
-    if (isSyncing || targetSubs.length === 0) return;
+    if (targetSubs.length === 0) return;
     setIsSyncing(true);
 
     const fetchResults = await Promise.all(
@@ -88,17 +88,28 @@ export function App() {
       })
     );
 
-    const updatedSubs = fetchResults.map((r) => r.sub);
-    const newRawNodes = fetchResults.flatMap((r) => r.parsedNodes);
+    const updatedSubMap = new Map(fetchResults.map((r) => [r.sub.id, r.sub]));
+    const fetchedIds = new Set(targetSubs.map((s) => s.id));
+    const newFetchedNodes = fetchResults.flatMap((r) => r.parsedNodes);
 
-    setSubscriptions(updatedSubs);
-    setRawNodes(newRawNodes);
+    setSubscriptions((prev) =>
+      prev.map((s) => updatedSubMap.get(s.id) || s)
+    );
+
+    setRawNodes((prev) => {
+      const kept = prev.filter((n) => !fetchedIds.has(n.subscriptionId));
+      return [...kept, ...newFetchedNodes];
+    });
+
     setIsSyncing(false);
-  }, [isSyncing]);
+  }, []);
 
   const syncSubscriptions = useCallback(() => {
-    syncSubscriptionsForList(subscriptions);
-  }, [subscriptions, syncSubscriptionsForList]);
+    setSubscriptions((latestSubs) => {
+      syncSubscriptionsForList(latestSubs);
+      return latestSubs;
+    });
+  }, [syncSubscriptionsForList]);
 
   // Ensure initial sync runs strictly once
   const initialSyncRef = React.useRef(false);
@@ -327,6 +338,7 @@ export function App() {
       autoUpdateHours
     };
     setSubscriptions((prev) => [...prev, newSub]);
+    syncSubscriptionsForList([newSub]);
   };
 
   const handleUpdateSubscription = (id: string, name: string, url: string, autoUpdateHours: number) => {
