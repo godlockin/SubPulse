@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, Zap, Layers, FolderPlus, Download, CheckCircle2, AlertTriangle, ShieldCheck, Globe } from 'lucide-react';
+import { RefreshCw, Zap, Layers, FolderPlus, Download, CheckCircle2, AlertTriangle, ShieldCheck, Globe, BookOpen, Sparkles } from 'lucide-react';
 import { Subscription, DeduplicatedNode, TestProgress } from '../types/subscription';
 import { isInformationalNode } from '../utils/parser';
 
@@ -14,6 +14,8 @@ interface HeaderProps {
   onRunSpeedTest: () => void;
   onRunGeoTest: () => void;
   onOpenSubModal: () => void;
+  onOpenOnboarding: () => void;
+  onOpenDocs: () => void;
   onExport: (format: 'clash' | 'base64') => void;
   isSyncing: boolean;
   isGeoTesting: boolean;
@@ -30,6 +32,8 @@ export const Header: React.FC<HeaderProps> = ({
   onRunSpeedTest,
   onRunGeoTest,
   onOpenSubModal,
+  onOpenOnboarding,
+  onOpenDocs,
   onExport,
   isSyncing,
   isGeoTesting
@@ -131,6 +135,30 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <FolderPlus className="h-3.5 w-3.5 text-indigo-400" />
             <span>订阅管理</span>
+          </button>
+
+          {/* Onboarding Tour */}
+          <button
+            onClick={onOpenOnboarding}
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-950/60 px-3 py-1.5 text-xs font-semibold text-indigo-300 border border-indigo-500/40 hover:bg-indigo-900/60 transition-all shadow-sm relative"
+            title="重播 5 步动画引导 Tour"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
+            <span>新手引导</span>
+            <span className="absolute -top-1 -right-1 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+            </span>
+          </button>
+
+          {/* User Guide / Documentation */}
+          <button
+            onClick={onOpenDocs}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-200 border border-slate-700/70 hover:bg-slate-700/80 hover:text-white transition-all"
+            title="查看系统使用指南与常见问题 FAQ"
+          >
+            <BookOpen className="h-3.5 w-3.5 text-cyan-400" />
+            <span>使用指南</span>
           </button>
 
           {/* Refresh Subs */}

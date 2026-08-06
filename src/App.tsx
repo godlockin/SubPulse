@@ -5,6 +5,8 @@ import { ProgressBar } from './components/ProgressBar';
 import { NodeGrid } from './components/NodeGrid';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { BestNodeSelector } from './components/BestNodeSelector';
+import { OnboardingModal } from './components/OnboardingModal';
+import { DocumentationModal } from './components/DocumentationModal';
 import { Subscription, VPNNode, DeduplicatedNode, TestProgress, FilterOptions } from './types/subscription';
 import {
   getStoredSubscriptions,
@@ -25,6 +27,19 @@ export function App() {
   const [testResults, setTestResults] = useState<Map<string, DeduplicatedNode>>(new Map());
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [isDocOpen, setIsDocOpen] = useState(false);
+
+  // Auto-trigger Onboarding tour for first-time visitors
+  useEffect(() => {
+    const hasSeen = localStorage.getItem('subpulse_onboarding_seen');
+    if (!hasSeen) {
+      const timer = setTimeout(() => {
+        setIsOnboardingOpen(true);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const [testProgress, setTestProgress] = useState<TestProgress>({
     total: 0,
@@ -412,6 +427,8 @@ export function App() {
         onRunSpeedTest={handleRunSpeedTest}
         onRunGeoTest={handleRunGeoTest}
         onOpenSubModal={() => setIsSubModalOpen(true)}
+        onOpenOnboarding={() => setIsOnboardingOpen(true)}
+        onOpenDocs={() => setIsDocOpen(true)}
         onExport={handleExport}
         isSyncing={isSyncing}
         isGeoTesting={isGeoTesting}
@@ -459,6 +476,20 @@ export function App() {
         onUpdateSubscription={handleUpdateSubscription}
         onDeleteSubscription={handleDeleteSubscription}
         onToggleSubscription={handleToggleSubscription}
+      />
+
+      {/* Onboarding Tour Modal */}
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+        onOpenDocs={() => setIsDocOpen(true)}
+      />
+
+      {/* User Documentation & Knowledge Base Modal */}
+      <DocumentationModal
+        isOpen={isDocOpen}
+        onClose={() => setIsDocOpen(false)}
+        onReplayTour={() => setIsOnboardingOpen(true)}
       />
 
     </div>
