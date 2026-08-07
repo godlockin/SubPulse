@@ -81,7 +81,7 @@ export async function runParallelSpeedTest(
 
   const updateProgress = (updatedNode: DeduplicatedNode, force: boolean = false) => {
     const now = performance.now();
-    if (force || now - lastUpdateTime > 80 || completed === nodes.length) {
+    if (force || now - lastUpdateTime > 30 || completed === nodes.length) {
       lastUpdateTime = now;
       if (options.onProgress) {
         const avgLatency = success > 0 ? Math.round(totalLatency / success) : 0;
@@ -108,12 +108,13 @@ export async function runParallelSpeedTest(
       const item = queue.shift();
       if (!item) break;
 
-      // Mark node as testing
+      // Mark node as testing and trigger real-time UI highlight
       const testingNode: DeduplicatedNode = {
         ...item,
         status: 'testing'
       };
       resultsMap.set(item.fingerprint, testingNode);
+      updateProgress(testingNode, true);
 
       // Execute probe
       const res = await testSingleNodeLatency(item, timeoutMs);
@@ -137,7 +138,7 @@ export async function runParallelSpeedTest(
       };
 
       resultsMap.set(item.fingerprint, finalNode);
-      updateProgress(finalNode, completed === nodes.length);
+      updateProgress(finalNode, true);
     }
   };
 

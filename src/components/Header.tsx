@@ -8,6 +8,7 @@ interface HeaderProps {
   nodes: DeduplicatedNode[];
   rawTotalNodeCount: number;
   testProgress: TestProgress;
+  geoProgress?: { total: number; completed: number; isRunning: boolean };
   deduplicate: boolean;
   onToggleDeduplicate: () => void;
   onRefreshAllSubs: () => void;
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   nodes,
   rawTotalNodeCount,
   testProgress,
+  geoProgress,
   deduplicate,
   onToggleDeduplicate,
   onRefreshAllSubs,
@@ -196,7 +198,13 @@ export const Header: React.FC<HeaderProps> = ({
             title="检测所有节点真实 IP 归属地与位置匹配"
           >
             <Globe className={`h-3.5 w-3.5 text-cyan-400 ${isGeoTesting ? 'animate-spin' : ''}`} />
-            <span>{isGeoTesting ? '检测中...' : '检测 IP 归属地'}</span>
+            <span>
+              {isGeoTesting && geoProgress?.total
+                ? `检测 IP (${geoProgress.completed}/${geoProgress.total})...`
+                : isGeoTesting
+                ? '检测中...'
+                : '检测 IP 归属地'}
+            </span>
           </button>
 
           {/* Export */}

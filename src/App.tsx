@@ -150,6 +150,11 @@ export function App() {
   // IP Geolocation state
   const [geoMap, setGeoMap] = useState<Record<string, any>>(() => getCachedGeoMap());
   const [isGeoTesting, setIsGeoTesting] = useState(false);
+  const [geoProgress, setGeoProgress] = useState<{ total: number; completed: number; isRunning: boolean }>({
+    total: 0,
+    completed: 0,
+    isRunning: false
+  });
 
   // Compute deduplicated nodes combining raw nodes, latency test cache, and geo info
   const deduplicatedNodes = useMemo(() => {
@@ -241,9 +246,67 @@ export function App() {
       });
   }, [deduplicatedNodes, filterOptions]);
 
-  // Run full parallel speed test
+  // Run Parallel IP Geo Test across all deduplicated nodes (12 concurrency pool)
+  const handleRunGeoTest = useCallback(async () => {
+    if (deduplicatedNodes.length === 0 || isGeoTesting) return;
+    setIsGeoTesting(true);
+
+    // Unique servers needing fetch
+    const serversToFetch = Array.from(
+      new Set(deduplicatedNodes.map((n) => n.primaryNode.server).filter((s) => !geoMap[s]))
+    );
+
+    if (serversToFetch.length === 0) {
+      setIsGeoTesting(false);
+      return;
+    }
+
+    setGeoProgress({
+      total: serversToFetch.length,
+      completed: 0,
+      isRunning: true
+    });
+
+    const concurrency = 12;
+    const queue = [...serversToFetch];
+    let completedCount = 0;
+
+    const worker = async () => {
+      while (queue.length > 0) {
+        const server = queue.shift();
+        if (!server) break;
+
+        const geoInfo = await fetchIPGeo(server);
+        completedCount++;
+
+        setGeoProgress((prev) => ({
+          ...prev,
+          completed: completedCount
+        }));
+
+        if (geoInfo) {
+          // Immediately stream update to geoMap state for real-time UI refresh!
+          setGeoMap((prev) => ({
+            ...prev,
+            [server]: geoInfo
+          }));
+        }
+      }
+    };
+
+    const pool = Array.from({ length: Math.min(concurrency, serversToFetch.length) }, () => worker());
+    await Promise.all(pool);
+
+    setIsGeoTesting(false);
+    setGeoProgress((prev) => ({ ...prev, isRunning: false }));
+  }, [deduplicatedNodes, isGeoTesting, geoMap]);
+
+  // Run full parallel speed test (also auto-triggers IP Geo test concurrently)
   const handleRunSpeedTest = async () => {
     if (deduplicatedNodes.length === 0 || testProgress.isRunning) return;
+
+    // Trigger IP Geo testing simultaneously in parallel
+    handleRunGeoTest();
 
     setTestProgress((prev) => ({
       ...prev,
@@ -297,48 +360,6 @@ export function App() {
     });
 
     saveLatencyCache([updated]);
-  };
-
-  // Run Parallel IP Geo Test across all deduplicated nodes (12 concurrency pool)
-  const handleRunGeoTest = async () => {
-    if (deduplicatedNodes.length === 0 || isGeoTesting) return;
-    setIsGeoTesting(true);
-
-    const newGeoMap = { ...geoMap };
-
-    // Unique servers needing fetch
-    const serversToFetch = Array.from(
-      new Set(deduplicatedNodes.map((n) => n.primaryNode.server).filter((s) => !newGeoMap[s]))
-    );
-
-    if (serversToFetch.length === 0) {
-      setIsGeoTesting(false);
-      return;
-    }
-
-    const concurrency = 12;
-    const queue = [...serversToFetch];
-    let hasUpdates = false;
-
-    const worker = async () => {
-      while (queue.length > 0) {
-        const server = queue.shift();
-        if (!server) break;
-        const geoInfo = await fetchIPGeo(server);
-        if (geoInfo) {
-          newGeoMap[server] = geoInfo;
-          hasUpdates = true;
-        }
-      }
-    };
-
-    const pool = Array.from({ length: Math.min(concurrency, serversToFetch.length) }, () => worker());
-    await Promise.all(pool);
-
-    if (hasUpdates) {
-      setGeoMap({ ...newGeoMap });
-    }
-    setIsGeoTesting(false);
   };
 
   // Subscription management handlers
@@ -419,6 +440,7 @@ export function App() {
         nodes={filteredNodes}
         rawTotalNodeCount={rawNodes.length}
         testProgress={testProgress}
+        geoProgress={geoProgress}
         deduplicate={filterOptions.deduplicate}
         onToggleDeduplicate={() =>
           setFilterOptions((prev) => ({ ...prev, deduplicate: !prev.deduplicate }))
