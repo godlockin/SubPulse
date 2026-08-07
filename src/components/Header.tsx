@@ -43,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   const activeSubsCount = subscriptions.filter((s) => s.enabled).length;
   const okNodesCount = nodes.filter((n) => n.status === 'ok').length;
   const timeoutCount = nodes.filter((n) => n.status === 'timeout').length;
+  const isTestingAny = testProgress.isRunning || isGeoTesting;
 
   // Find node with global lowest latency (excluding informational nodes)
   const bestNode = React.useMemo(() => {
@@ -116,36 +117,24 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2.5">
           
-          {/* Segment 1: Primary Execution CTAs */}
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
-            {/* Run Parallel Speed Test */}
+          {/* Segment 1: Unified Execution CTA */}
+          <div className="flex items-center p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
             <button
               onClick={onRunSpeedTest}
-              disabled={testProgress.isRunning || nodes.length === 0}
-              className={`flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-emerald-950/50 hover:from-emerald-500 hover:to-teal-500 transition-all ${
-                testProgress.isRunning ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'
+              disabled={isTestingAny || nodes.length === 0}
+              className={`flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg shadow-emerald-950/60 hover:from-emerald-500 hover:to-cyan-500 transition-all ${
+                isTestingAny ? 'opacity-80 cursor-not-allowed' : 'active:scale-95 hover:shadow-cyan-900/40'
               }`}
+              title="一键同时并发检测全量节点的响应延迟与真实 IP 地理归属地"
             >
-              <Zap className={`h-3.5 w-3.5 ${testProgress.isRunning ? 'animate-bounce' : ''}`} />
-              <span>{testProgress.isRunning ? '测速中...' : '一键并发测速'}</span>
-            </button>
-
-            {/* Run IP Geo Test */}
-            <button
-              onClick={onRunGeoTest}
-              disabled={isGeoTesting || nodes.length === 0}
-              className={`flex items-center gap-1.5 rounded-lg bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-cyan-300 border border-cyan-800/50 hover:bg-cyan-950/60 transition-all ${
-                isGeoTesting ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'
-              }`}
-              title="检测所有节点真实 IP 归属地与位置匹配"
-            >
-              <Globe className={`h-3.5 w-3.5 text-cyan-400 ${isGeoTesting ? 'animate-spin' : ''}`} />
+              <Zap className={`h-4 w-4 text-amber-300 ${isTestingAny ? 'animate-bounce' : ''}`} />
+              <Globe className={`h-3.5 w-3.5 text-cyan-200 ${isTestingAny ? 'animate-spin' : ''}`} />
               <span>
-                {isGeoTesting && geoProgress?.total
-                  ? `检测 IP (${geoProgress.completed}/${geoProgress.total})...`
-                  : isGeoTesting
-                  ? '检测中...'
-                  : '检测 IP 归属地'}
+                {isTestingAny
+                  ? `并发检测中 (测速 ${testProgress.completed}/${testProgress.total}${
+                      geoProgress?.total ? ` | IP ${geoProgress.completed}/${geoProgress.total}` : ''
+                    })...`
+                  : '一键测速与 IP 定位'}
               </span>
             </button>
           </div>
