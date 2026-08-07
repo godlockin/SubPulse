@@ -73,7 +73,7 @@ export const BestNodeSelector: React.FC<BestNodeSelectorProps> = ({ nodes, subsc
   };
 
   return (
-    <div className="glass-panel my-3 rounded-2xl border border-indigo-500/30 p-4 bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 shadow-xl">
+    <div className="glass-panel my-3 rounded-2xl border border-indigo-500/30 p-4 bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 shadow-xl" data-tour="best-node-selector">
       
       {/* Selector Mode Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-3">

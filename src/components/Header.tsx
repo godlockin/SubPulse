@@ -118,7 +118,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex flex-wrap items-center gap-2.5">
           
           {/* Segment 1: Unified Execution CTA */}
-          <div className="flex items-center p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
+          <div className="flex items-center p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner" data-tour="speed-test-btn">
             <button
               onClick={onRunSpeedTest}
               disabled={isTestingAny || nodes.length === 0}
@@ -144,6 +144,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Manage Subscriptions */}
             <button
               onClick={onOpenSubModal}
+              data-tour="sub-modal-btn"
               className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800 hover:text-white transition-all"
               title="添加/更新/移除订阅链接"
             >
@@ -167,6 +168,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Deduplicate Toggle */}
             <button
               onClick={onToggleDeduplicate}
+              data-tour="dedup-toggle"
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
                 deduplicate
                   ? 'bg-indigo-600/40 text-indigo-300 border border-indigo-500/50 shadow-sm'
@@ -182,7 +184,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Segment 3: Auxiliary & Export */}
           <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
             {/* Export Dropdown */}
-            <div className="relative group">
+            <div className="relative group" data-tour="export-menu">
               <button className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-950/40 transition-all">
                 <Download className="h-3.5 w-3.5 text-amber-400" />
                 <span>导出</span>
