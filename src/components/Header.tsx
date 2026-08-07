@@ -114,119 +114,134 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           
-          {/* Deduplicate Toggle */}
-          <button
-            onClick={onToggleDeduplicate}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-              deduplicate
-                ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 shadow-sm'
-                : 'bg-slate-800/80 text-slate-400 border border-slate-700/60 hover:text-white'
-            }`}
-            title={deduplicate ? '跨订阅已开启去重' : '显示全量节点'}
-          >
-            <Layers className="h-3.5 w-3.5" />
-            <span>{deduplicate ? '已去重' : '未去重'}</span>
-          </button>
-
-          {/* Manage Subscriptions */}
-          <button
-            onClick={onOpenSubModal}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-200 border border-slate-700/70 hover:bg-slate-700/80 hover:text-white transition-all"
-          >
-            <FolderPlus className="h-3.5 w-3.5 text-indigo-400" />
-            <span>订阅管理</span>
-          </button>
-
-          {/* Onboarding Tour */}
-          <button
-            onClick={onOpenOnboarding}
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-950/60 px-3 py-1.5 text-xs font-semibold text-indigo-300 border border-indigo-500/40 hover:bg-indigo-900/60 transition-all shadow-sm relative"
-            title="重播 5 步动画引导 Tour"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
-            <span>新手引导</span>
-            <span className="absolute -top-1 -right-1 flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-            </span>
-          </button>
-
-          {/* User Guide / Documentation */}
-          <button
-            onClick={onOpenDocs}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-200 border border-slate-700/70 hover:bg-slate-700/80 hover:text-white transition-all"
-            title="查看系统使用指南与常见问题 FAQ"
-          >
-            <BookOpen className="h-3.5 w-3.5 text-cyan-400" />
-            <span>使用指南</span>
-          </button>
-
-          {/* Refresh Subs */}
-          <button
-            onClick={onRefreshAllSubs}
-            disabled={isSyncing}
-            className={`flex items-center gap-1.5 rounded-lg bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-slate-200 border border-slate-700/70 hover:bg-slate-700/80 transition-all ${
-              isSyncing ? 'opacity-60 cursor-not-allowed' : ''
-            }`}
-            title="拉取最新远程节点信息"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? '更新中...' : '刷新远程订阅'}</span>
-          </button>
-
-          {/* Run Parallel Speed Test */}
-          <button
-            onClick={onRunSpeedTest}
-            disabled={testProgress.isRunning || nodes.length === 0}
-            className={`flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-emerald-900/30 hover:from-emerald-500 hover:to-teal-500 transition-all ${
-              testProgress.isRunning ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'
-            }`}
-          >
-            <Zap className={`h-3.5 w-3.5 ${testProgress.isRunning ? 'animate-bounce' : ''}`} />
-            <span>{testProgress.isRunning ? '测速中...' : '并发测速'}</span>
-          </button>
-
-          {/* Run IP Geo Test */}
-          <button
-            onClick={onRunGeoTest}
-            disabled={isGeoTesting || nodes.length === 0}
-            className={`flex items-center gap-1.5 rounded-lg bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-cyan-300 border border-cyan-800/60 hover:bg-cyan-950/60 transition-all ${
-              isGeoTesting ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'
-            }`}
-            title="检测所有节点真实 IP 归属地与位置匹配"
-          >
-            <Globe className={`h-3.5 w-3.5 text-cyan-400 ${isGeoTesting ? 'animate-spin' : ''}`} />
-            <span>
-              {isGeoTesting && geoProgress?.total
-                ? `检测 IP (${geoProgress.completed}/${geoProgress.total})...`
-                : isGeoTesting
-                ? '检测中...'
-                : '检测 IP 归属地'}
-            </span>
-          </button>
-
-          {/* Export */}
-          <div className="relative group">
-            <button className="flex items-center gap-1 rounded-lg bg-slate-800/90 px-2.5 py-1.5 text-xs font-medium text-slate-300 border border-slate-700/70 hover:text-white transition-all">
-              <Download className="h-3.5 w-3.5 text-amber-400" />
-              <span>导出</span>
+          {/* Segment 1: Primary Execution CTAs */}
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
+            {/* Run Parallel Speed Test */}
+            <button
+              onClick={onRunSpeedTest}
+              disabled={testProgress.isRunning || nodes.length === 0}
+              className={`flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-md shadow-emerald-950/50 hover:from-emerald-500 hover:to-teal-500 transition-all ${
+                testProgress.isRunning ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'
+              }`}
+            >
+              <Zap className={`h-3.5 w-3.5 ${testProgress.isRunning ? 'animate-bounce' : ''}`} />
+              <span>{testProgress.isRunning ? '测速中...' : '一键并发测速'}</span>
             </button>
-            <div className="absolute right-0 top-full mt-1 hidden w-32 rounded-lg bg-slate-900 p-1 border border-slate-800 shadow-xl group-hover:block z-40">
-              <button
-                onClick={() => onExport('base64')}
-                className="w-full text-left px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded"
-              >
-                Base64 订阅
+
+            {/* Run IP Geo Test */}
+            <button
+              onClick={onRunGeoTest}
+              disabled={isGeoTesting || nodes.length === 0}
+              className={`flex items-center gap-1.5 rounded-lg bg-slate-800/90 px-3 py-1.5 text-xs font-medium text-cyan-300 border border-cyan-800/50 hover:bg-cyan-950/60 transition-all ${
+                isGeoTesting ? 'opacity-70 cursor-not-allowed' : 'active:scale-95'
+              }`}
+              title="检测所有节点真实 IP 归属地与位置匹配"
+            >
+              <Globe className={`h-3.5 w-3.5 text-cyan-400 ${isGeoTesting ? 'animate-spin' : ''}`} />
+              <span>
+                {isGeoTesting && geoProgress?.total
+                  ? `检测 IP (${geoProgress.completed}/${geoProgress.total})...`
+                  : isGeoTesting
+                  ? '检测中...'
+                  : '检测 IP 归属地'}
+              </span>
+            </button>
+          </div>
+
+          {/* Segment 2: Data Management */}
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
+            {/* Manage Subscriptions */}
+            <button
+              onClick={onOpenSubModal}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800 hover:text-white transition-all"
+              title="添加/更新/移除订阅链接"
+            >
+              <FolderPlus className="h-3.5 w-3.5 text-indigo-400" />
+              <span>订阅管理</span>
+            </button>
+
+            {/* Refresh Subs */}
+            <button
+              onClick={onRefreshAllSubs}
+              disabled={isSyncing}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800 transition-all ${
+                isSyncing ? 'opacity-60 cursor-not-allowed' : ''
+              }`}
+              title="拉取最新远程节点信息"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? '更新中...' : '刷新'}</span>
+            </button>
+
+            {/* Deduplicate Toggle */}
+            <button
+              onClick={onToggleDeduplicate}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
+                deduplicate
+                  ? 'bg-indigo-600/40 text-indigo-300 border border-indigo-500/50 shadow-sm'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+              title={deduplicate ? '跨订阅已开启去重' : '显示全量节点'}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              <span>{deduplicate ? '已去重' : '未去重'}</span>
+            </button>
+          </div>
+
+          {/* Segment 3: Auxiliary & Export */}
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
+            {/* Export Dropdown */}
+            <div className="relative group">
+              <button className="flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-950/40 transition-all">
+                <Download className="h-3.5 w-3.5 text-amber-400" />
+                <span>导出</span>
               </button>
-              <button
-                onClick={() => onExport('clash')}
-                className="w-full text-left px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded"
-              >
-                Clash 配置 (YAML)
-              </button>
+              <div className="absolute right-0 top-full mt-1.5 hidden w-36 rounded-xl bg-slate-900 p-1.5 border border-slate-800 shadow-2xl group-hover:block z-40">
+                <button
+                  onClick={() => onExport('base64')}
+                  className="w-full text-left px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
+                >
+                  Base64 订阅
+                </button>
+                <button
+                  onClick={() => onExport('clash')}
+                  className="w-full text-left px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
+                >
+                  Clash 配置 (YAML)
+                </button>
+              </div>
             </div>
+
+            {/* Help Menu Dropdown */}
+            <div className="relative group">
+              <button className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-950/50 transition-all relative">
+                <Sparkles className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
+                <span>帮助</span>
+                <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+              </button>
+              <div className="absolute right-0 top-full mt-1.5 hidden w-36 rounded-xl bg-slate-900 p-1.5 border border-slate-800 shadow-2xl group-hover:block z-40">
+                <button
+                  onClick={onOpenOnboarding}
+                  className="w-full flex items-center gap-2 text-left px-2.5 py-1.5 text-xs text-indigo-300 hover:bg-indigo-950/60 rounded-lg transition-colors"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                  <span>新手引导 Tour</span>
+                </button>
+                <button
+                  onClick={onOpenDocs}
+                  className="w-full flex items-center gap-2 text-left px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
+                >
+                  <BookOpen className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>使用指南与 FAQ</span>
+                </button>
+              </div>
+            </div>
+
           </div>
 
         </div>
