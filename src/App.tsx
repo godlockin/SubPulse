@@ -147,6 +147,28 @@ export function App() {
     initData();
   }, []);
 
+  // Periodic background check for auto-update subscriptions (checks every 1 minute)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSubscriptions((latestSubs) => {
+        const now = Date.now();
+        const dueSubs = latestSubs.filter((sub) => {
+          if (!sub.enabled || !sub.url) return false;
+          const intervalMs = (sub.autoUpdateHours || 6) * 3600 * 1000;
+          const lastUpdate = sub.lastUpdated || 0;
+          return now - lastUpdate >= intervalMs;
+        });
+
+        if (dueSubs.length > 0) {
+          syncSubscriptionsForList(dueSubs);
+        }
+        return latestSubs;
+      });
+    }, 60 * 1000);
+
+    return () => clearInterval(timer);
+  }, [syncSubscriptionsForList]);
+
   // IP Geolocation state
   const [geoMap, setGeoMap] = useState<Record<string, any>>(() => getCachedGeoMap());
   const [isGeoTesting, setIsGeoTesting] = useState(false);
