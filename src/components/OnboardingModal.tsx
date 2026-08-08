@@ -126,15 +126,15 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   const popoverOnTop = targetRect ? targetRect.top > window.innerHeight / 2 : false;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden font-sans">
+    <div className="fixed inset-0 z-40 overflow-hidden font-sans pointer-events-none">
       
-      {/* Semi-translucent dark overlay */}
-      <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px] transition-opacity duration-300" />
+      {/* Semi-translucent dark overlay (pointer-events-none to allow direct page interactions) */}
+      <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-[2px] transition-opacity duration-300 pointer-events-none" />
 
       {/* Target Element Spotlight Highlight Box */}
       {isTargetVisible && targetRect && (
         <div
-          className="absolute z-50 rounded-xl transition-all duration-300 pointer-events-none"
+          className="absolute z-40 rounded-xl transition-all duration-300 pointer-events-none"
           style={{
             top: `${Math.max(4, targetRect.top - 6)}px`,
             left: `${Math.max(4, targetRect.left - 6)}px`,
@@ -152,7 +152,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
 
       {/* Floating Popover Step Guidance Card */}
       <div
-        className={`fixed z-50 w-full max-w-md p-4 transition-all duration-300 ${
+        className={`fixed z-50 w-full max-w-md p-4 transition-all duration-300 pointer-events-auto ${
           isTargetVisible && targetRect
             ? 'left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0'
             : 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2'
