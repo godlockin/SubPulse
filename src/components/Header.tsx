@@ -189,19 +189,22 @@ export const Header: React.FC<HeaderProps> = ({
                 <Download className="h-3.5 w-3.5 text-amber-400" />
                 <span>导出</span>
               </button>
-              <div className="absolute right-0 top-full mt-1.5 hidden w-36 rounded-xl bg-slate-900 p-1.5 border border-slate-800 shadow-2xl group-hover:block z-40">
-                <button
-                  onClick={() => onExport('base64')}
-                  className="w-full text-left px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
-                >
-                  Base64 订阅
-                </button>
-                <button
-                  onClick={() => onExport('clash')}
-                  className="w-full text-left px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
-                >
-                  Clash 配置 (YAML)
-                </button>
+              {/* Dropdown Container with seamless hover hit area */}
+              <div className="absolute right-0 top-full pt-1.5 hidden w-36 group-hover:block z-40">
+                <div className="rounded-xl bg-slate-900 p-1.5 border border-slate-800 shadow-2xl space-y-0.5">
+                  <button
+                    onClick={() => onExport('base64')}
+                    className="w-full text-left px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
+                  >
+                    Base64 订阅
+                  </button>
+                  <button
+                    onClick={() => onExport('clash')}
+                    className="w-full text-left px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
+                  >
+                    Clash 配置 (YAML)
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -215,21 +218,24 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
                 </span>
               </button>
-              <div className="absolute right-0 top-full mt-1.5 hidden w-36 rounded-xl bg-slate-900 p-1.5 border border-slate-800 shadow-2xl group-hover:block z-40">
-                <button
-                  onClick={onOpenOnboarding}
-                  className="w-full flex items-center gap-2 text-left px-2.5 py-1.5 text-xs text-indigo-300 hover:bg-indigo-950/60 rounded-lg transition-colors"
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                  <span>新手引导 Tour</span>
-                </button>
-                <button
-                  onClick={onOpenDocs}
-                  className="w-full flex items-center gap-2 text-left px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
-                >
-                  <BookOpen className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>使用指南与 FAQ</span>
-                </button>
+              {/* Dropdown Container with seamless hover hit area */}
+              <div className="absolute right-0 top-full pt-1.5 hidden w-40 group-hover:block z-40">
+                <div className="rounded-xl bg-slate-900 p-1.5 border border-slate-800 shadow-2xl space-y-0.5">
+                  <button
+                    onClick={onOpenOnboarding}
+                    className="w-full flex items-center gap-2 text-left px-2.5 py-1.5 text-xs text-indigo-300 hover:bg-indigo-950/60 rounded-lg transition-colors"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                    <span>新手引导 Tour</span>
+                  </button>
+                  <button
+                    onClick={onOpenDocs}
+                    className="w-full flex items-center gap-2 text-left px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 hover:text-white rounded-lg transition-colors"
+                  >
+                    <BookOpen className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+                    <span>使用指南与 FAQ</span>
+                  </button>
+                </div>
               </div>
             </div>
 
