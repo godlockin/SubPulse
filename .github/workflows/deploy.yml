@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - miao
   workflow_dispatch:
 
 jobs:
