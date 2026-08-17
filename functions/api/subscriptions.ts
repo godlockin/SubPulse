@@ -15,6 +15,20 @@ function getDeviceIdFromRequest(request: Request): string {
   return 'device_default';
 }
 
+function isSampleSubscription(sub: any): boolean {
+  if (!sub) return false;
+  const id = String(sub.id || '').toLowerCase();
+  const name = String(sub.name || '').toLowerCase();
+  const url = String(sub.url || '').toLowerCase();
+  return (
+    id === 'sub_demo_1' ||
+    id.startsWith('sub_demo_') ||
+    name.includes('示例订阅') ||
+    name.includes('demo sub') ||
+    url.includes('free-vpn-subscriptions')
+  );
+}
+
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   try {
     const deviceId = getDeviceIdFromRequest(context.request);
@@ -26,7 +40,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         .prepare('SELECT id, name, url, enabled, lastUpdated, nodeCount, autoUpdateHours, error FROM device_subscriptions WHERE device_id = ?')
         .bind(deviceId)
         .all();
-      return new Response(JSON.stringify(results || []), {
+      const cleaned = (results || []).filter((s: any) => !isSampleSubscription(s));
+      return new Response(JSON.stringify(cleaned), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
@@ -40,7 +55,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
     const key = `sub_${deviceId}`;
     const data = await kv.get(key, { type: 'json' });
-    return new Response(JSON.stringify(data || []), {
+    const cleaned = (Array.isArray(data) ? data : []).filter((s: any) => !isSampleSubscription(s));
+    return new Response(JSON.stringify(cleaned), {
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'
@@ -59,6 +75,18 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const deviceId = getDeviceIdFromRequest(context.request);
     const kv = context.env.SUB_MANAGER_KV;
     const subs = await context.request.json();
+
+    if (Array.isArray(subs) && subs.length > 0) {
+      const nonSampleSubs = subs.filter((s: any) => !isSampleSubscription(s));
+      if (nonSampleSubs.length === 0) {
+        // 如果有且只有示例订阅的信息则不保存数据库
+        return new Response(JSON.stringify({ success: true, count: 0, skipped: 'Sample subscriptions only' }), {
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        });
+      }
+    }
+
+    const cleanSubs = (Array.isArray(subs) ? subs : []).filter((s: any) => !isSampleSubscription(s));
 
     // Optional D1 Database support
     if (context.env.DB) {
@@ -79,7 +107,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
       // Delete old and insert new for device
       await context.env.DB.prepare('DELETE FROM device_subscriptions WHERE device_id = ?').bind(deviceId).run();
-      for (const item of subs as any[]) {
+      for (const item of cleanSubs) {
         await context.env.DB.prepare(`
           INSERT INTO device_subscriptions (device_id, id, name, url, enabled, lastUpdated, nodeCount, autoUpdateHours, error)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -89,7 +117,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         ).run();
       }
 
-      return new Response(JSON.stringify({ success: true, count: (subs as any[]).length }), {
+      return new Response(JSON.stringify({ success: true, count: cleanSubs.length }), {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
       });
     }
@@ -102,9 +130,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     const key = `sub_${deviceId}`;
-    await kv.put(key, JSON.stringify(subs));
+    await kv.put(key, JSON.stringify(cleanSubs));
 
-    return new Response(JSON.stringify({ success: true, deviceId }), {
+    return new Response(JSON.stringify({ success: true, deviceId, count: cleanSubs.length }), {
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*'

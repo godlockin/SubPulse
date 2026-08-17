@@ -4,32 +4,47 @@ import { getDeviceId } from './deviceId';
 const SUBS_KEY = 'sub_manager_subscriptions_v1';
 const TEST_CACHE_KEY = 'sub_manager_latency_cache_v1';
 
-// Initial default demo subscriptions if empty
-const DEFAULT_SUBS: Subscription[] = [
-  {
-    id: 'sub_demo_1',
-    name: '示例订阅 (Demo Sub)',
-    url: 'https://raw.githubusercontent.com/free-vpn-subscriptions/free-vpn/main/sub.txt',
-    enabled: true,
-    lastUpdated: null,
-    nodeCount: 0,
-    autoUpdateHours: 6
-  }
-];
+// Initial default subscriptions if empty
+const DEFAULT_SUBS: Subscription[] = [];
+
+export function isSampleSubscription(sub: Partial<Subscription>): boolean {
+  if (!sub) return false;
+  const id = (sub.id || '').toLowerCase();
+  const name = (sub.name || '').toLowerCase();
+  const url = (sub.url || '').toLowerCase();
+  return (
+    id === 'sub_demo_1' ||
+    id.startsWith('sub_demo_') ||
+    name.includes('示例订阅') ||
+    name.includes('demo sub') ||
+    url.includes('free-vpn-subscriptions')
+  );
+}
+
+export function filterNonSampleSubscriptions(subs: Subscription[]): Subscription[] {
+  if (!Array.isArray(subs)) return [];
+  return subs.filter((s) => !isSampleSubscription(s));
+}
 
 export function getStoredSubscriptions(): Subscription[] {
   try {
     const raw = localStorage.getItem(SUBS_KEY);
     if (!raw) return DEFAULT_SUBS;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    const cleaned = filterNonSampleSubscriptions(parsed);
+    if (cleaned.length !== parsed.length) {
+      localStorage.setItem(SUBS_KEY, JSON.stringify(cleaned));
+    }
+    return cleaned;
   } catch {
     return DEFAULT_SUBS;
   }
 }
 
 export function saveSubscriptions(subs: Subscription[]): void {
+  const cleanSubs = filterNonSampleSubscriptions(subs);
   try {
-    localStorage.setItem(SUBS_KEY, JSON.stringify(subs));
+    localStorage.setItem(SUBS_KEY, JSON.stringify(cleanSubs));
   } catch (e) {
     console.error('Failed to save subscriptions to local storage:', e);
   }
@@ -49,9 +64,10 @@ export async function loadSubscriptionsFromApi(): Promise<Subscription[] | null>
     });
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        localStorage.setItem(SUBS_KEY, JSON.stringify(data));
-        return data;
+      if (Array.isArray(data)) {
+        const cleaned = filterNonSampleSubscriptions(data);
+        localStorage.setItem(SUBS_KEY, JSON.stringify(cleaned));
+        return cleaned;
       }
     }
   } catch {
@@ -61,6 +77,16 @@ export async function loadSubscriptionsFromApi(): Promise<Subscription[] | null>
 }
 
 export async function syncSubscriptionsToApi(subs: Subscription[]): Promise<boolean> {
+  if (Array.isArray(subs) && subs.length > 0) {
+    const nonSampleSubs = filterNonSampleSubscriptions(subs);
+    if (nonSampleSubs.length === 0) {
+      // 如果有且只有示例订阅的信息则不保存数据库
+      return false;
+    }
+  }
+
+  const cleanSubs = filterNonSampleSubscriptions(subs);
+
   try {
     const deviceId = getDeviceId();
     const res = await fetch(`/api/subscriptions?deviceId=${encodeURIComponent(deviceId)}`, {
@@ -69,7 +95,7 @@ export async function syncSubscriptionsToApi(subs: Subscription[]): Promise<bool
         'Content-Type': 'application/json',
         'X-Device-Id': deviceId
       },
-      body: JSON.stringify(subs)
+      body: JSON.stringify(cleanSubs)
     });
     return res.ok;
   } catch {
