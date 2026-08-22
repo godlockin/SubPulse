@@ -27,24 +27,50 @@ db.exec(`
   );
 `);
 
+export function isSampleSubscription(sub: Partial<Subscription>): boolean {
+  if (!sub) return false;
+  const id = (sub.id || '').toLowerCase();
+  const name = (sub.name || '').toLowerCase();
+  const url = (sub.url || '').toLowerCase();
+  return (
+    id === 'sub_demo_1' ||
+    id.startsWith('sub_demo_') ||
+    name.includes('示例订阅') ||
+    name.includes('demo sub') ||
+    url.includes('free-vpn-subscriptions')
+  );
+}
+
 export function getSubscriptionsFromSqlite(deviceId: string = 'default'): Subscription[] {
   const rows = db
     .prepare('SELECT * FROM device_subscriptions WHERE device_id = ?')
     .all(deviceId) as any[];
 
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    url: r.url,
-    enabled: Boolean(r.enabled),
-    lastUpdated: r.lastUpdated ? Number(r.lastUpdated) : null,
-    nodeCount: Number(r.nodeCount || 0),
-    autoUpdateHours: Number(r.autoUpdateHours || 6),
-    error: r.error || null
-  }));
+  return rows
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      url: r.url,
+      enabled: Boolean(r.enabled),
+      lastUpdated: r.lastUpdated ? Number(r.lastUpdated) : null,
+      nodeCount: Number(r.nodeCount || 0),
+      autoUpdateHours: Number(r.autoUpdateHours || 6),
+      error: r.error || null
+    }))
+    .filter((s) => !isSampleSubscription(s));
 }
 
 export function saveSubscriptionsToSqlite(deviceId: string = 'default', subs: Subscription[]): void {
+  if (!Array.isArray(subs)) return;
+
+  const nonSampleSubs = subs.filter((s) => !isSampleSubscription(s));
+  if (subs.length > 0 && nonSampleSubs.length === 0) {
+    // 如果有且只有示例订阅的信息则不保存数据库
+    return;
+  }
+
+  const items = nonSampleSubs;
+
   const insertStmt = db.prepare(`
     INSERT INTO device_subscriptions (device_id, id, name, url, enabled, lastUpdated, nodeCount, autoUpdateHours, error)
     VALUES (@deviceId, @id, @name, @url, @enabled, @lastUpdated, @nodeCount, @autoUpdateHours, @error)
@@ -59,17 +85,17 @@ export function saveSubscriptionsToSqlite(deviceId: string = 'default', subs: Su
   `);
 
   const deleteMissingStmt = db.prepare(
-    `DELETE FROM device_subscriptions WHERE device_id = ? AND id NOT IN (${subs.map(() => '?').join(',') || "''"})`
+    `DELETE FROM device_subscriptions WHERE device_id = ? AND id NOT IN (${items.map(() => '?').join(',') || "''"})`
   );
 
-  const transaction = db.transaction((items: Subscription[]) => {
-    if (items.length > 0) {
-      deleteMissingStmt.run(deviceId, ...items.map((i) => i.id));
+  const transaction = db.transaction((itemList: Subscription[]) => {
+    if (itemList.length > 0) {
+      deleteMissingStmt.run(deviceId, ...itemList.map((i) => i.id));
     } else {
       db.prepare('DELETE FROM device_subscriptions WHERE device_id = ?').run(deviceId);
     }
 
-    for (const item of items) {
+    for (const item of itemList) {
       insertStmt.run({
         deviceId,
         id: item.id,
@@ -84,7 +110,7 @@ export function saveSubscriptionsToSqlite(deviceId: string = 'default', subs: Su
     }
   });
 
-  transaction(subs);
+  transaction(items);
 }
 
 export function deleteSubscriptionFromSqlite(deviceId: string = 'default', id: string): void {
