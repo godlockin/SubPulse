@@ -1,6 +1,6 @@
 import React from 'react';
-import { RefreshCw, Zap, Layers, FolderPlus, Download, CheckCircle2, AlertTriangle, ShieldCheck, Globe, BookOpen, Sparkles } from 'lucide-react';
-import { Subscription, DeduplicatedNode, TestProgress } from '../types/subscription';
+import { RefreshCw, Zap, Layers, FolderPlus, Download, CheckCircle2, AlertTriangle, ShieldCheck, Globe, BookOpen, Sparkles, Clock, Hourglass } from 'lucide-react';
+import { Subscription, DeduplicatedNode, TestProgress, ScheduleSettings } from '../types/subscription';
 import { isInformationalNode } from '../utils/parser';
 
 interface HeaderProps {
@@ -10,11 +10,14 @@ interface HeaderProps {
   testProgress: TestProgress;
   geoProgress?: { total: number; completed: number; isRunning: boolean };
   deduplicate: boolean;
+  scheduleSettings: ScheduleSettings;
+  isSpeedTestQueued: boolean;
   onToggleDeduplicate: () => void;
   onRefreshAllSubs: () => void;
   onRunSpeedTest: () => void;
   onRunGeoTest: () => void;
   onOpenSubModal: () => void;
+  onOpenScheduler: () => void;
   onOpenOnboarding: () => void;
   onOpenDocs: () => void;
   onExport: (format: 'clash' | 'base64') => void;
@@ -29,11 +32,14 @@ export const Header: React.FC<HeaderProps> = ({
   testProgress,
   geoProgress,
   deduplicate,
+  scheduleSettings,
+  isSpeedTestQueued,
   onToggleDeduplicate,
   onRefreshAllSubs,
   onRunSpeedTest,
   onRunGeoTest,
   onOpenSubModal,
+  onOpenScheduler,
   onOpenOnboarding,
   onOpenDocs,
   onExport,
@@ -67,10 +73,10 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-2">
               <h1 className="text-lg font-bold tracking-tight text-white md:text-xl">SubPulse 订阅测速中心</h1>
               <span className="rounded-full bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-400 border border-indigo-500/20">
-                v1.0.0
+                v1.1.0
               </span>
             </div>
-            <p className="text-xs text-slate-400">跨订阅去重 • 本地网络高并发测速 • 定时拉取</p>
+            <p className="text-xs text-slate-400">跨订阅去重 • 本地网络并发测速 • 定时自动化调度</p>
           </div>
         </div>
 
@@ -134,13 +140,46 @@ export const Header: React.FC<HeaderProps> = ({
                   ? `并发检测中 (测速 ${testProgress.completed}/${testProgress.total}${
                       geoProgress?.total ? ` | IP ${geoProgress.completed}/${geoProgress.total}` : ''
                     })...`
+                  : isSpeedTestQueued
+                  ? '测速已排队等待更新...'
                   : '一键测速与 IP 定位'}
               </span>
             </button>
           </div>
 
-          {/* Segment 2: Data Management */}
+          {/* Segment 2: Automation & Data Management */}
           <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900/90 border border-slate-800 shadow-inner">
+            
+            {/* Scheduler Settings Button */}
+            <button
+              onClick={onOpenScheduler}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-all ${
+                isSpeedTestQueued
+                  ? 'bg-amber-950/70 border-amber-800/80 text-amber-300 animate-pulse'
+                  : scheduleSettings.autoSyncEnabled || scheduleSettings.autoSpeedTestEnabled
+                  ? 'bg-indigo-950/60 border-indigo-800/80 text-indigo-300 hover:bg-indigo-900/60'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`}
+              title="定时更新与自动化测速周期设置"
+            >
+              {isSpeedTestQueued ? (
+                <Hourglass className="h-3.5 w-3.5 text-amber-400" />
+              ) : (
+                <Clock className="h-3.5 w-3.5 text-indigo-400" />
+              )}
+              <span>
+                {isSpeedTestQueued
+                  ? '测速等待中...'
+                  : scheduleSettings.autoSyncEnabled && scheduleSettings.autoSpeedTestEnabled
+                  ? `定时: 🔄${scheduleSettings.autoSyncIntervalMinutes}m ⚡${scheduleSettings.autoSpeedTestIntervalMinutes}m`
+                  : scheduleSettings.autoSyncEnabled
+                  ? `定时更新: ${scheduleSettings.autoSyncIntervalMinutes}m`
+                  : scheduleSettings.autoSpeedTestEnabled
+                  ? `定时测速: ${scheduleSettings.autoSpeedTestIntervalMinutes}m`
+                  : '定时: 已关闭'}
+              </span>
+            </button>
+
             {/* Manage Subscriptions */}
             <button
               onClick={onOpenSubModal}

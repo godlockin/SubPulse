@@ -72,3 +72,26 @@ export interface FilterOptions {
   sortBy: 'latency' | 'name' | 'protocol' | 'subscription';
   sortOrder: 'asc' | 'desc';
 }
+
+export interface ScheduleSettings {
+  // 订阅自动拉取更新
+  autoSyncEnabled: boolean;
+  autoSyncIntervalMinutes: number; // 更新周期 (分钟)，如 15, 30, 60, 120, 360, 720, 1440
+  
+  // 节点自动测速与 IP 回溯
+  autoSpeedTestEnabled: boolean;
+  autoSpeedTestIntervalMinutes: number; // 测速周期 (分钟)，如 10, 15, 30, 60, 120, 360
+  
+  // 联动选项
+  autoTestOnSync: boolean; // 订阅更新完成后自动触发测速
+  autoTestOnStartup: boolean; // 应用启动初始化完成后自动测速
+  
+  // 测速性能参数
+  timeoutMs: number; // 测速超时毫秒 (默认 3500)
+  concurrency: number; // 测速并发数 (默认 25)
+  geoConcurrency: number; // IP 归属地检测并发数 (默认 12)
+  
+  // 上次执行时间戳
+  lastSyncTime?: number | null;
+  lastSpeedTestTime?: number | null;
+}

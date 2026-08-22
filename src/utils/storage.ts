@@ -1,8 +1,43 @@
-import { Subscription, VPNNode, DeduplicatedNode } from '../types/subscription';
+import { Subscription, VPNNode, DeduplicatedNode, ScheduleSettings } from '../types/subscription';
 import { getDeviceId } from './deviceId';
 
 const SUBS_KEY = 'sub_manager_subscriptions_v1';
 const TEST_CACHE_KEY = 'sub_manager_latency_cache_v1';
+const SCHEDULE_KEY = 'sub_manager_schedule_settings_v1';
+
+// Initial default schedule settings
+export const DEFAULT_SCHEDULE_SETTINGS: ScheduleSettings = {
+  autoSyncEnabled: true,
+  autoSyncIntervalMinutes: 60, // 默认每 60 分钟自动拉取订阅
+  autoSpeedTestEnabled: true,
+  autoSpeedTestIntervalMinutes: 30, // 默认每 30 分钟自动并发测速 + IP 回溯
+  autoTestOnSync: true, // 订阅拉取更新后自动触发测速
+  autoTestOnStartup: true, // 应用启动初始化完成后自动测速
+  timeoutMs: 3500,
+  concurrency: 25,
+  geoConcurrency: 12,
+  lastSyncTime: null,
+  lastSpeedTestTime: null
+};
+
+export function getStoredScheduleSettings(): ScheduleSettings {
+  try {
+    const raw = localStorage.getItem(SCHEDULE_KEY);
+    if (!raw) return DEFAULT_SCHEDULE_SETTINGS;
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_SCHEDULE_SETTINGS, ...parsed };
+  } catch {
+    return DEFAULT_SCHEDULE_SETTINGS;
+  }
+}
+
+export function saveScheduleSettings(settings: ScheduleSettings): void {
+  try {
+    localStorage.setItem(SCHEDULE_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.error('Failed to save schedule settings to local storage:', e);
+  }
+}
 
 // Initial default subscriptions if empty
 const DEFAULT_SUBS: Subscription[] = [];
@@ -50,7 +85,10 @@ export function saveSubscriptions(subs: Subscription[]): void {
   }
 
   // Also sync to API asynchronously (SQLite locally / Cloudflare KV on CF) with deviceId
-  syncSubscriptionsToApi(subs);
+  // 订阅信息数组如果为空数组则不上传/保存到 cf 存储或后端数据库
+  if (cleanSubs.length > 0) {
+    syncSubscriptionsToApi(cleanSubs);
+  }
 }
 
 // API Sync (SQLite locally / Cloudflare KV on Cloudflare Pages) with deviceId
@@ -66,8 +104,10 @@ export async function loadSubscriptionsFromApi(): Promise<Subscription[] | null>
       const data = await res.json();
       if (Array.isArray(data)) {
         const cleaned = filterNonSampleSubscriptions(data);
-        localStorage.setItem(SUBS_KEY, JSON.stringify(cleaned));
-        return cleaned;
+        if (cleaned.length > 0) {
+          localStorage.setItem(SUBS_KEY, JSON.stringify(cleaned));
+          return cleaned;
+        }
       }
     }
   } catch {
@@ -77,15 +117,15 @@ export async function loadSubscriptionsFromApi(): Promise<Subscription[] | null>
 }
 
 export async function syncSubscriptionsToApi(subs: Subscription[]): Promise<boolean> {
-  if (Array.isArray(subs) && subs.length > 0) {
-    const nonSampleSubs = filterNonSampleSubscriptions(subs);
-    if (nonSampleSubs.length === 0) {
-      // 如果有且只有示例订阅的信息则不保存数据库
-      return false;
-    }
+  // 订阅信息数组需要判断是否为空数组，如果是空数组则不上传/保存到 cf 存储里
+  if (!Array.isArray(subs) || subs.length === 0) {
+    return false;
   }
 
   const cleanSubs = filterNonSampleSubscriptions(subs);
+  if (cleanSubs.length === 0) {
+    return false;
+  }
 
   try {
     const deviceId = getDeviceId();

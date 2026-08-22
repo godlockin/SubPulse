@@ -76,17 +76,21 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const kv = context.env.SUB_MANAGER_KV;
     const subs = await context.request.json();
 
-    if (Array.isArray(subs) && subs.length > 0) {
-      const nonSampleSubs = subs.filter((s: any) => !isSampleSubscription(s));
-      if (nonSampleSubs.length === 0) {
-        // 如果有且只有示例订阅的信息则不保存数据库
-        return new Response(JSON.stringify({ success: true, count: 0, skipped: 'Sample subscriptions only' }), {
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-        });
-      }
+    // 订阅信息数组需要判断是否为空数组，如果是空数组则不上传/保存到 cf 存储里
+    if (!Array.isArray(subs) || subs.length === 0) {
+      return new Response(JSON.stringify({ success: false, skipped: 'Empty subscriptions array rejected' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
     }
 
-    const cleanSubs = (Array.isArray(subs) ? subs : []).filter((s: any) => !isSampleSubscription(s));
+    const cleanSubs = subs.filter((s: any) => !isSampleSubscription(s));
+    if (cleanSubs.length === 0) {
+      return new Response(JSON.stringify({ success: false, skipped: 'Empty or sample-only subscriptions rejected' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+      });
+    }
 
     // Optional D1 Database support
     if (context.env.DB) {

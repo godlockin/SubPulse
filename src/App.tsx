@@ -1,20 +1,23 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { FilterBar } from './components/FilterBar';
 import { ProgressBar } from './components/ProgressBar';
 import { NodeGrid } from './components/NodeGrid';
 import { SubscriptionModal } from './components/SubscriptionModal';
+import { SchedulerModal } from './components/SchedulerModal';
 import { BestNodeSelector } from './components/BestNodeSelector';
 import { OnboardingModal } from './components/OnboardingModal';
 import { DocumentationModal } from './components/DocumentationModal';
-import { Subscription, VPNNode, DeduplicatedNode, TestProgress, FilterOptions } from './types/subscription';
+import { Subscription, VPNNode, DeduplicatedNode, TestProgress, FilterOptions, ScheduleSettings } from './types/subscription';
 import {
   getStoredSubscriptions,
   saveSubscriptions,
   loadSubscriptionsFromApi,
   getStoredLatencyCache,
   saveLatencyCache,
-  fetchSubscriptionContent
+  fetchSubscriptionContent,
+  getStoredScheduleSettings,
+  saveScheduleSettings
 } from './utils/storage';
 import { parseSubscriptionContent, isInformationalNode } from './utils/parser';
 import { deduplicateNodes } from './utils/deduplicator';
@@ -26,9 +29,18 @@ export function App() {
   const [rawNodes, setRawNodes] = useState<VPNNode[]>([]);
   const [testResults, setTestResults] = useState<Map<string, DeduplicatedNode>>(new Map());
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSpeedTestQueued, setIsSpeedTestQueued] = useState(false);
+  const [scheduleSettings, setScheduleSettings] = useState<ScheduleSettings>(getStoredScheduleSettings);
+
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
+  const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isDocOpen, setIsDocOpen] = useState(false);
+
+  // Keep scheduleSettings in sync with local storage
+  useEffect(() => {
+    saveScheduleSettings(scheduleSettings);
+  }, [scheduleSettings]);
 
   // Auto-trigger Onboarding tour for first-time visitors
   useEffect(() => {
@@ -62,13 +74,155 @@ export function App() {
     sortOrder: 'asc'
   });
 
-  // Save subscriptions changes to storage
-  useEffect(() => {
-    saveSubscriptions(subscriptions);
-  }, [subscriptions]);
+  // Refs for tracking latest state inside timers and async callbacks
+  const scheduleSettingsRef = useRef(scheduleSettings);
+  scheduleSettingsRef.current = scheduleSettings;
+  const isSyncingRef = useRef(isSyncing);
+  isSyncingRef.current = isSyncing;
+  const isSpeedTestQueuedRef = useRef(isSpeedTestQueued);
+  isSpeedTestQueuedRef.current = isSpeedTestQueued;
+  const rawNodesRef = useRef(rawNodes);
+  rawNodesRef.current = rawNodes;
+  const subscriptionsRef = useRef(subscriptions);
+  subscriptionsRef.current = subscriptions;
+
+  // IP Geolocation state
+  const [geoMap, setGeoMap] = useState<Record<string, any>>(() => getCachedGeoMap());
+  const [isGeoTesting, setIsGeoTesting] = useState(false);
+  const [geoProgress, setGeoProgress] = useState<{ total: number; completed: number; isRunning: boolean }>({
+    total: 0,
+    completed: 0,
+    isRunning: false
+  });
+
+  // Compute deduplicated nodes combining raw nodes, latency test cache, and geo info
+  const deduplicatedNodes = useMemo(() => {
+    const cacheMap = getStoredLatencyCache();
+    const map = new Map<string, { latency: number | null; status: DeduplicatedNode['status']; errorMsg?: string }>();
+
+    // Merge cache & memory testResults
+    cacheMap.forEach((v, k) => map.set(k, v));
+    testResults.forEach((v, k) =>
+      map.set(k, { latency: v.latency, status: v.status, errorMsg: v.errorMsg })
+    );
+
+    const baseNodes = deduplicateNodes(rawNodes, map);
+    return baseNodes.map((node) => ({
+      ...node,
+      geo: geoMap[node.primaryNode.server] || null
+    }));
+  }, [rawNodes, testResults, geoMap]);
+
+  const deduplicatedNodesRef = useRef(deduplicatedNodes);
+  deduplicatedNodesRef.current = deduplicatedNodes;
+
+  // Run Parallel IP Geo Test across all deduplicated nodes
+  const handleRunGeoTest = useCallback(async (nodesToTest?: DeduplicatedNode[]) => {
+    const targetNodes = nodesToTest || deduplicatedNodesRef.current;
+    if (targetNodes.length === 0 || isGeoTesting) return;
+    setIsGeoTesting(true);
+
+    const currentGeo = getCachedGeoMap();
+    // Unique servers needing fetch
+    const serversToFetch = Array.from(
+      new Set(targetNodes.map((n) => n.primaryNode.server).filter((s) => !currentGeo[s]))
+    );
+
+    if (serversToFetch.length === 0) {
+      setIsGeoTesting(false);
+      return;
+    }
+
+    setGeoProgress({
+      total: serversToFetch.length,
+      completed: 0,
+      isRunning: true
+    });
+
+    const concurrency = scheduleSettingsRef.current.geoConcurrency || 12;
+    const queue = [...serversToFetch];
+    let completedCount = 0;
+
+    const worker = async () => {
+      while (queue.length > 0) {
+        const server = queue.shift();
+        if (!server) break;
+
+        const geoInfo = await fetchIPGeo(server);
+        completedCount++;
+
+        setGeoProgress((prev) => ({
+          ...prev,
+          completed: completedCount
+        }));
+
+        if (geoInfo) {
+          // Immediately stream update to geoMap state for real-time UI refresh!
+          setGeoMap((prev) => ({
+            ...prev,
+            [server]: geoInfo
+          }));
+        }
+      }
+    };
+
+    const pool = Array.from({ length: Math.min(concurrency, serversToFetch.length) }, () => worker());
+    await Promise.all(pool);
+
+    setIsGeoTesting(false);
+    setGeoProgress((prev) => ({ ...prev, isRunning: false }));
+  }, [isGeoTesting]);
+
+  // Run full parallel speed test (also auto-triggers IP Geo test concurrently)
+  const handleRunSpeedTest = useCallback(async (nodesToTest?: DeduplicatedNode[]) => {
+    // 关键排队逻辑：若订阅更新尚未完成，节点测速（+ip回溯）自动挂起排队等待
+    if (isSyncingRef.current) {
+      setIsSpeedTestQueued(true);
+      return;
+    }
+
+    const targetNodes = nodesToTest || deduplicatedNodesRef.current;
+    if (targetNodes.length === 0 || testProgress.isRunning) return;
+
+    // Trigger IP Geo testing simultaneously in parallel
+    handleRunGeoTest(targetNodes);
+
+    setTestProgress((prev) => ({
+      ...prev,
+      total: targetNodes.length,
+      completed: 0,
+      testing: targetNodes.length,
+      success: 0,
+      timeout: 0,
+      error: 0,
+      avgLatency: 0,
+      isRunning: true
+    }));
+
+    const finalResults = await runParallelSpeedTest(targetNodes, {
+      timeoutMs: scheduleSettingsRef.current.timeoutMs || 3500,
+      concurrency: scheduleSettingsRef.current.concurrency || 25,
+      onProgress: (prog, updatedNode) => {
+        setTestProgress(prog);
+        setTestResults((prev) => {
+          const next = new Map(prev);
+          next.set(updatedNode.fingerprint, updatedNode);
+          return next;
+        });
+      }
+    });
+
+    saveLatencyCache(Array.from(finalResults.values()));
+
+    // Record last speed test time
+    setScheduleSettings((prev) => ({
+      ...prev,
+      lastSpeedTestTime: Date.now()
+    }));
+  }, [testProgress.isRunning, handleRunGeoTest]);
 
   // Parallel Sync / pull remote subscription links content
-  const syncSubscriptionsForList = useCallback(async (targetSubs: Subscription[]) => {
+  const syncSubscriptionsForList = useCallback(async (targetSubs: Subscription[], isInitial: boolean = false) => {
     if (targetSubs.length === 0) return;
     setIsSyncing(true);
 
@@ -107,17 +261,37 @@ export function App() {
     const fetchedIds = new Set(targetSubs.map((s) => s.id));
     const newFetchedNodes = fetchResults.flatMap((r) => r.parsedNodes);
 
-    setSubscriptions((prev) =>
-      prev.map((s) => updatedSubMap.get(s.id) || s)
-    );
+    const newSubs = subscriptionsRef.current.map((s) => updatedSubMap.get(s.id) || s);
+    setSubscriptions(newSubs);
 
-    setRawNodes((prev) => {
-      const kept = prev.filter((n) => !fetchedIds.has(n.subscriptionId));
-      return [...kept, ...newFetchedNodes];
-    });
+    const keptRaw = rawNodesRef.current.filter((n) => !fetchedIds.has(n.subscriptionId));
+    const nextRawNodes = [...keptRaw, ...newFetchedNodes];
+    setRawNodes(nextRawNodes);
 
     setIsSyncing(false);
-  }, []);
+
+    // Record last sync time
+    setScheduleSettings((prev) => ({
+      ...prev,
+      lastSyncTime: Date.now()
+    }));
+
+    // 计算最新的去重节点列表
+    const cacheMap = getStoredLatencyCache();
+    const freshDeduplicated = deduplicateNodes(nextRawNodes, cacheMap);
+
+    // 订阅更新完成后，检查是否有排队的测速任务，或是否开启了「更新后自动测速」或「启动自测」
+    const shouldRunTest = isSpeedTestQueuedRef.current || 
+      scheduleSettingsRef.current.autoTestOnSync || 
+      (isInitial && scheduleSettingsRef.current.autoTestOnStartup);
+
+    if (shouldRunTest && freshDeduplicated.length > 0) {
+      setIsSpeedTestQueued(false);
+      setTimeout(() => {
+        handleRunSpeedTest(freshDeduplicated);
+      }, 100);
+    }
+  }, [handleRunSpeedTest]);
 
   const syncSubscriptions = useCallback(() => {
     setSubscriptions((latestSubs) => {
@@ -127,7 +301,7 @@ export function App() {
   }, [syncSubscriptionsForList]);
 
   // Ensure initial sync runs strictly once
-  const initialSyncRef = React.useRef(false);
+  const initialSyncRef = useRef(false);
 
   // Auto-sync subscriptions on initial mount
   useEffect(() => {
@@ -136,65 +310,109 @@ export function App() {
 
     async function initData() {
       const apiSubs = await loadSubscriptionsFromApi();
-      const subsToUse = (apiSubs && apiSubs.length > 0) ? apiSubs : subscriptions;
+      const subsToUse = (apiSubs && apiSubs.length > 0) ? apiSubs : subscriptionsRef.current;
       if (apiSubs && apiSubs.length > 0) {
         setSubscriptions(apiSubs);
       }
       if (subsToUse.some((s) => s.enabled)) {
-        syncSubscriptionsForList(subsToUse);
+        syncSubscriptionsForList(subsToUse, true);
       }
     }
     initData();
-  }, []);
-
-  // Periodic background check for auto-update subscriptions (checks every 1 minute)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSubscriptions((latestSubs) => {
-        const now = Date.now();
-        const dueSubs = latestSubs.filter((sub) => {
-          if (!sub.enabled || !sub.url) return false;
-          const intervalMs = (sub.autoUpdateHours || 6) * 3600 * 1000;
-          const lastUpdate = sub.lastUpdated || 0;
-          return now - lastUpdate >= intervalMs;
-        });
-
-        if (dueSubs.length > 0) {
-          syncSubscriptionsForList(dueSubs);
-        }
-        return latestSubs;
-      });
-    }, 60 * 1000);
-
-    return () => clearInterval(timer);
   }, [syncSubscriptionsForList]);
 
-  // IP Geolocation state
-  const [geoMap, setGeoMap] = useState<Record<string, any>>(() => getCachedGeoMap());
-  const [isGeoTesting, setIsGeoTesting] = useState(false);
-  const [geoProgress, setGeoProgress] = useState<{ total: number; completed: number; isRunning: boolean }>({
-    total: 0,
-    completed: 0,
-    isRunning: false
-  });
+  // Periodic background scheduler heartbeat timer (checks every 5 seconds)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const settings = scheduleSettingsRef.current;
+      const now = Date.now();
 
-  // Compute deduplicated nodes combining raw nodes, latency test cache, and geo info
-  const deduplicatedNodes = useMemo(() => {
-    const cacheMap = getStoredLatencyCache();
-    const map = new Map<string, { latency: number | null; status: DeduplicatedNode['status']; errorMsg?: string }>();
+      // 1. 订阅定时自动更新检查
+      if (settings.autoSyncEnabled) {
+        const syncIntervalMs = (settings.autoSyncIntervalMinutes || 60) * 60 * 1000;
+        const lastSync = settings.lastSyncTime || 0;
+        if (now - lastSync >= syncIntervalMs && !isSyncingRef.current) {
+          const activeSubs = subscriptionsRef.current.filter((s) => s.enabled && s.url);
+          if (activeSubs.length > 0) {
+            syncSubscriptionsForList(activeSubs);
+          }
+        }
+      }
 
-    // Merge cache & memory testResults
-    cacheMap.forEach((v, k) => map.set(k, v));
-    testResults.forEach((v, k) =>
-      map.set(k, { latency: v.latency, status: v.status, errorMsg: v.errorMsg })
-    );
+      // 2. 节点定时并发测速 (+IP回溯) 检查
+      if (settings.autoSpeedTestEnabled) {
+        const testIntervalMs = (settings.autoSpeedTestIntervalMinutes || 30) * 60 * 1000;
+        const lastTest = settings.lastSpeedTestTime || 0;
+        if (now - lastTest >= testIntervalMs) {
+          if (isSyncingRef.current) {
+            // 若订阅更新未完成，加入排队等待队列
+            setIsSpeedTestQueued(true);
+          } else if (deduplicatedNodesRef.current.length > 0) {
+            handleRunSpeedTest();
+          }
+        }
+      }
+    }, 5000);
 
-    const baseNodes = deduplicateNodes(rawNodes, map);
-    return baseNodes.map((node) => ({
+    return () => clearInterval(timer);
+  }, [syncSubscriptionsForList, handleRunSpeedTest]);
+
+  // Test single node
+  const handleTestSingleNode = async (node: DeduplicatedNode) => {
+    setTestResults((prev) => {
+      const next = new Map(prev);
+      next.set(node.fingerprint, { ...node, status: 'testing' });
+      return next;
+    });
+
+    const res = await testSingleNodeLatency(node, 3500);
+    const updated: DeduplicatedNode = {
       ...node,
-      geo: geoMap[node.primaryNode.server] || null
-    }));
-  }, [rawNodes, testResults, geoMap]);
+      latency: res.latency,
+      status: res.status,
+      errorMsg: res.errorMsg,
+      lastTested: Date.now()
+    };
+
+    setTestResults((prev) => {
+      const next = new Map(prev);
+      next.set(node.fingerprint, updated);
+      return next;
+    });
+
+    saveLatencyCache([updated]);
+  };
+
+  // Subscription management handlers
+  const handleAddSubscription = (name: string, url: string, autoUpdateHours: number) => {
+    const newSub: Subscription = {
+      id: `sub_${Date.now()}`,
+      name,
+      url,
+      enabled: true,
+      lastUpdated: null,
+      nodeCount: 0,
+      autoUpdateHours
+    };
+    setSubscriptions((prev) => [...prev, newSub]);
+    syncSubscriptionsForList([newSub]);
+  };
+
+  const handleUpdateSubscription = (id: string, name: string, url: string, autoUpdateHours: number) => {
+    setSubscriptions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, name, url, autoUpdateHours, error: null } : s))
+    );
+  };
+
+  const handleDeleteSubscription = (id: string) => {
+    setSubscriptions((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleToggleSubscription = (id: string) => {
+    setSubscriptions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
+    );
+  };
 
   // Available unique protocols for filter
   const protocols = useMemo(() => {
@@ -268,153 +486,6 @@ export function App() {
       });
   }, [deduplicatedNodes, filterOptions]);
 
-  // Run Parallel IP Geo Test across all deduplicated nodes (12 concurrency pool)
-  const handleRunGeoTest = useCallback(async () => {
-    if (deduplicatedNodes.length === 0 || isGeoTesting) return;
-    setIsGeoTesting(true);
-
-    // Unique servers needing fetch
-    const serversToFetch = Array.from(
-      new Set(deduplicatedNodes.map((n) => n.primaryNode.server).filter((s) => !geoMap[s]))
-    );
-
-    if (serversToFetch.length === 0) {
-      setIsGeoTesting(false);
-      return;
-    }
-
-    setGeoProgress({
-      total: serversToFetch.length,
-      completed: 0,
-      isRunning: true
-    });
-
-    const concurrency = 12;
-    const queue = [...serversToFetch];
-    let completedCount = 0;
-
-    const worker = async () => {
-      while (queue.length > 0) {
-        const server = queue.shift();
-        if (!server) break;
-
-        const geoInfo = await fetchIPGeo(server);
-        completedCount++;
-
-        setGeoProgress((prev) => ({
-          ...prev,
-          completed: completedCount
-        }));
-
-        if (geoInfo) {
-          // Immediately stream update to geoMap state for real-time UI refresh!
-          setGeoMap((prev) => ({
-            ...prev,
-            [server]: geoInfo
-          }));
-        }
-      }
-    };
-
-    const pool = Array.from({ length: Math.min(concurrency, serversToFetch.length) }, () => worker());
-    await Promise.all(pool);
-
-    setIsGeoTesting(false);
-    setGeoProgress((prev) => ({ ...prev, isRunning: false }));
-  }, [deduplicatedNodes, isGeoTesting, geoMap]);
-
-  // Run full parallel speed test (also auto-triggers IP Geo test concurrently)
-  const handleRunSpeedTest = async () => {
-    if (deduplicatedNodes.length === 0 || testProgress.isRunning) return;
-
-    // Trigger IP Geo testing simultaneously in parallel
-    handleRunGeoTest();
-
-    setTestProgress((prev) => ({
-      ...prev,
-      total: deduplicatedNodes.length,
-      completed: 0,
-      testing: deduplicatedNodes.length,
-      success: 0,
-      timeout: 0,
-      error: 0,
-      avgLatency: 0,
-      isRunning: true
-    }));
-
-    const finalResults = await runParallelSpeedTest(deduplicatedNodes, {
-      timeoutMs: 3500,
-      concurrency: 25,
-      onProgress: (prog, updatedNode) => {
-        setTestProgress(prog);
-        setTestResults((prev) => {
-          const next = new Map(prev);
-          next.set(updatedNode.fingerprint, updatedNode);
-          return next;
-        });
-      }
-    });
-
-    saveLatencyCache(Array.from(finalResults.values()));
-  };
-
-  // Test single node
-  const handleTestSingleNode = async (node: DeduplicatedNode) => {
-    setTestResults((prev) => {
-      const next = new Map(prev);
-      next.set(node.fingerprint, { ...node, status: 'testing' });
-      return next;
-    });
-
-    const res = await testSingleNodeLatency(node, 3500);
-    const updated: DeduplicatedNode = {
-      ...node,
-      latency: res.latency,
-      status: res.status,
-      errorMsg: res.errorMsg,
-      lastTested: Date.now()
-    };
-
-    setTestResults((prev) => {
-      const next = new Map(prev);
-      next.set(node.fingerprint, updated);
-      return next;
-    });
-
-    saveLatencyCache([updated]);
-  };
-
-  // Subscription management handlers
-  const handleAddSubscription = (name: string, url: string, autoUpdateHours: number) => {
-    const newSub: Subscription = {
-      id: `sub_${Date.now()}`,
-      name,
-      url,
-      enabled: true,
-      lastUpdated: null,
-      nodeCount: 0,
-      autoUpdateHours
-    };
-    setSubscriptions((prev) => [...prev, newSub]);
-    syncSubscriptionsForList([newSub]);
-  };
-
-  const handleUpdateSubscription = (id: string, name: string, url: string, autoUpdateHours: number) => {
-    setSubscriptions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, name, url, autoUpdateHours, error: null } : s))
-    );
-  };
-
-  const handleDeleteSubscription = (id: string) => {
-    setSubscriptions((prev) => prev.filter((s) => s.id !== id));
-  };
-
-  const handleToggleSubscription = (id: string) => {
-    setSubscriptions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s))
-    );
-  };
-
   // Export subscription links
   const handleExport = (format: 'clash' | 'base64') => {
     const targetNodes = filteredNodes.map((n) => n.primaryNode);
@@ -464,13 +535,16 @@ export function App() {
         testProgress={testProgress}
         geoProgress={geoProgress}
         deduplicate={filterOptions.deduplicate}
+        scheduleSettings={scheduleSettings}
+        isSpeedTestQueued={isSpeedTestQueued}
         onToggleDeduplicate={() =>
           setFilterOptions((prev) => ({ ...prev, deduplicate: !prev.deduplicate }))
         }
         onRefreshAllSubs={syncSubscriptions}
-        onRunSpeedTest={handleRunSpeedTest}
-        onRunGeoTest={handleRunGeoTest}
+        onRunSpeedTest={() => handleRunSpeedTest()}
+        onRunGeoTest={() => handleRunGeoTest()}
         onOpenSubModal={() => setIsSubModalOpen(true)}
+        onOpenScheduler={() => setIsSchedulerOpen(true)}
         onOpenOnboarding={() => setIsOnboardingOpen(true)}
         onOpenDocs={() => setIsDocOpen(true)}
         onExport={handleExport}
@@ -520,6 +594,23 @@ export function App() {
         onUpdateSubscription={handleUpdateSubscription}
         onDeleteSubscription={handleDeleteSubscription}
         onToggleSubscription={handleToggleSubscription}
+      />
+
+      {/* Scheduled Automation & Settings Modal */}
+      <SchedulerModal
+        isOpen={isSchedulerOpen}
+        onClose={() => setIsSchedulerOpen(false)}
+        settings={scheduleSettings}
+        onUpdateSettings={(newSettings) =>
+          setScheduleSettings((prev) => ({ ...prev, ...newSettings }))
+        }
+        isSyncing={isSyncing}
+        isTesting={testProgress.isRunning}
+        isSpeedTestQueued={isSpeedTestQueued}
+        onTriggerSync={syncSubscriptions}
+        onTriggerSpeedTest={() => handleRunSpeedTest()}
+        subscriptionsCount={subscriptions.length}
+        nodesCount={deduplicatedNodes.length}
       />
 
       {/* Onboarding Tour Modal */}
